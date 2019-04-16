@@ -36,7 +36,7 @@ def train(net, epochs, batch_size,content_dataset, style_dataset, optimizer, c, 
 
             print('Epoch:{} Batch:{} Loss={:.5f}'.format(e, i+1, loss.item()))
 
-            show_generated_images(dataset=content_dataset, net=net)
+            show_generated_images(dataset=content_dataset, net=net, device=device)
 
         torch.save({'state_dict':net.state_dict(),
                     'epoch':e,
@@ -44,7 +44,7 @@ def train(net, epochs, batch_size,content_dataset, style_dataset, optimizer, c, 
                     's':s}, (pkl_name+str(e)+'.pth'))
 
 
-def show_generated_images(dataset, net, show_n=5):
+def show_generated_images(dataset, net, device,show_n=5):
     net.eval()
     image_idx = np.random.choice(len(dataset), show_n)
     image_idx
@@ -52,13 +52,13 @@ def show_generated_images(dataset, net, show_n=5):
     for idx in image_idx:
         images.append(dataset[idx])
 
-    images = torch.stack(images)
+    images = torch.stack(images).to(device)
     original_images = ((images.detach().numpy().transpose(0,2,3,1)+1)*127.5).astype(int)
-    generated_images = (net(images).detach().numpy().tranpose(0,2,3,1)+1)*127.5.astype(int)
+    generated_images = ((net(images).detach().numpy().tranpose(0,2,3,1)+1)*127.5).astype(int)
 
     fig, axes = plt.subplots(2, len(original_images))
 
-    for i in len(original_images):
+    for i in range(len(original_images)):
         axes[0, i].imshow(original_images[i])
         axes[1, i].imshow(generated_images[i])
 
