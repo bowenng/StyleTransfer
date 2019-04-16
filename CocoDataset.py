@@ -3,11 +3,13 @@ from PIL import Image
 from pycocotools.coco import COCO
 from torchvision import transforms
 import os
+import numpy as np
+
 
 
 class MSCOCODataset(data.Dataset):
 
-    def __init__(self, annotation_file: str, image_folder: str, transform=transforms.Compose([transforms.Resize((256,256)),transforms.ToTensor(), transforms.Normalize([0.4711, 0.4475, 0.4080],[0.2341, 0.2291, 0.2325])])) -> None:
+    def __init__(self, annotation_file: str, image_folder: str, transform=None) -> None:
         super().__init__()
 
         self.annotation_file = annotation_file
