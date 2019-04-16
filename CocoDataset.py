@@ -1,12 +1,7 @@
-import numpy as np
-import torch
 import torch.utils.data as data
 from PIL import Image
 from pycocotools.coco import COCO
 from torchvision import transforms
-import numpy as np
-import random
-import json
 import os
 
 
