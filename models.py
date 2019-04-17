@@ -10,14 +10,15 @@ class StyleTransferNet(nn.Module):
         self.downsample_conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=9, stride=2)
         self.downsample_conv2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2)
         self.residual_block1 = ResidualBlock(128, 256)
-        self.residual_block2 = ResidualBlock(256, 512)
-        self.residual_block3 = ResidualBlock(512, 512)
-        self.residual_block4 = ResidualBlock(512, 256)
+        self.residual_block2 = ResidualBlock(256, 256)
+        self.residual_block3 = ResidualBlock(256, 256)
+        self.residual_block4 = ResidualBlock(256, 256)
         self.residual_block5 = ResidualBlock(256, 128)
         self.upsample_conv1 = nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=3, stride=2)
         self.upsample_conv2 = nn.ConvTranspose2d(in_channels=64, out_channels=3, kernel_size=9, stride=2)
         self.relu = nn.ReLU()
-        self.tanh = nn.Tanh()
+        self.tanh = ScaledTanh(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
 
     def forward(self, x):
         initial_size = x.shape
@@ -86,13 +87,12 @@ class ContentLossNet(nn.Module):
     def forward(self, x):
         return self.content_loss_net(x)
 
-    def content_loss(self, content_image, generated_image):
-        out_c = self.content_loss_net(content_image).view(content_image.size()[0],-1)
-        out_g = self.content_loss_net(generated_image).view(generated_image.size()[0],-1)
+    def content_loss(self, c, g):
+        c = self.content_loss_net(c).view(c.size()[0],-1)
+        g = self.content_loss_net(g).view(g.size()[0],-1)
 
-        CHW = out_c.size()[1]
-        euclidean_distance = torch.mean(1/CHW*torch.sqrt(torch.sum((out_g - out_c)**2, dim=1)))
-        return euclidean_distance
+        CHW = c.size()[1]
+        return torch.mean(1/CHW*torch.sqrt(torch.sum((g - c)**2, dim=1)))
 
 
 class StyleLossNet(nn.Module):
@@ -112,34 +112,59 @@ class StyleLossNet(nn.Module):
 
         return (feature1, feature2, feature3, feature4)
 
-    def style_loss(self, style_images, generated_image):
-        style_image_batch = style_images.size()[0]
+    def style_loss(self, style_image, generated_image):
+        s1, s2, s3, s4 = self(style_image)
+        g1, g2, g3, g4 = self(generated_image)
+        
+        return (self.frobenius_norm(s1, g1)+self.frobenius_norm(s2, g2)+self.frobenius_norm(s3, g3)+self.frobenius_norm(s4, g4))
+        
 
-        avg_loss = torch.zeros((1,))
-        for style_image in style_images:
-            s1, s2, s3, s4 = self(style_image.unsqueeze(0))
-            g1, g2, g3, g4 = self(generated_image)
-
-            l1 = self.frobenius_norm(s1, g1)
-            l2 = self.frobenius_norm(s2, g2)
-            l3 = self.frobenius_norm(s3, g3)
-            l4 = self.frobenius_norm(s4, g4)
-            avg_loss.add_(l1+l2+l3+l4)
-        return avg_loss.div_(style_image_batch)
-
-    def frobenius_norm(self, s_features, g_features):
+    def frobenius_norm(self, s, g):
         # reshape to Batch, C, H*W
-        psi_s = s_features.view(s_features.size()[0], s_features.size()[1], -1)
-        CHW_s = s_features.size()[1]*s_features.size()[2]*s_features.size()[3]
-        G_s = torch.matmul(psi_s, psi_s.transpose(2, 1), )/CHW_s
+        s = s.view(s.size()[0], s.size()[1], -1)
+        CHW_s = s.size()[0]*s.size()[1]*s.size()[2]
+        s = torch.matmul(s, s.transpose(2, 1), )/CHW_s
 
-        psi_g = g_features.view(g_features.size()[0], g_features.size()[1], -1)
-        CHW_g = g_features.size()[1] * g_features.size()[2] * g_features.size()[3]
-        G_g = torch.matmul(psi_g, psi_g.transpose(2, 1)) / CHW_g
+        g = g.view(g.size()[0], g.size()[1], -1)
+        CHW_g = g.size()[0] * g.size()[1] * g.size()[2]
+        g = torch.matmul(g, g.transpose(2, 1)) / CHW_g
 
-        G_s = G_s.view(G_s.size()[0], -1)
-        G_g = G_g.view(G_g.size()[0], -1)
+        s = s.view(s.size()[0], -1)
+        g = g.view(g.size()[0], -1)
 
-        loss = torch.mean(torch.sqrt(torch.sum((G_s - G_g)**2, dim=1)))
+        return torch.mean(torch.sqrt(torch.sum((s - g)**2, dim=1)))
 
-        return loss
+        
+
+    
+class FeatureStyleLoss(nn.Module):
+    def __init__(self, c, s):
+        super().__init__()
+        self.style_loss_net = StyleLossNet()
+        self.content_loss_net = ContentLossNet()
+        self.c = c
+        self.s = s
+        
+    def forward(self, content, style, generated):
+        return self.c * self.content_loss_net.content_loss(content, generated) \
+                   + self.s * self.style_loss_net.style_loss(style, generated)
+        
+
+class ScaledTanh(nn.Module):
+    def __init__(self, mean, std):
+        super().__init__()
+        mean = torch.FloatTensor(mean).view(1,3,1,1)
+        std = torch.FloatTensor(std).view(1,3,1,1)
+        self.scale = (1/2/std)
+        max_old = (1-mean)/std
+        self.bias = max_old-self.scale
+        self.tanh = nn.Tanh()
+        self.register_buffer('k', self.scale)
+        self.register_buffer('b', self.bias)
+        
+    def forward(self, x):
+        x = self.tanh(x)
+        x = self.k * x + self.b
+        return x
+    
+    
