@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torchvision import transforms
 
-def train(net, epochs, batch_size,content_dataset, style_dataset, optimizer, c, s, device, pkl_name, show_every=500, show_images=False):
+def train(net, epochs, batch_size,content_dataset, style_dataset, optimizer, c, s, color, device, pkl_name, show_every=500):
     content_loader = data.DataLoader(dataset=content_dataset, batch_size=batch_size)
     style_loader = data.DataLoader(dataset=style_dataset, batch_size=1)
 
@@ -20,6 +20,7 @@ def train(net, epochs, batch_size,content_dataset, style_dataset, optimizer, c, 
     #criteria = FeatureStyleLoss(c, s).to(device)
     content_loss = ContentLossNet().to(device)
     style_loss = StyleLossNet().to(device)
+    color_loss = ColorSimilarityLoss().to(device)
     b = 0
     print('Training Starts! .......')
     for e in range(1, epochs+1):
@@ -33,23 +34,29 @@ def train(net, epochs, batch_size,content_dataset, style_dataset, optimizer, c, 
             
             c_loss = c*content_loss(images, generated_images)
             s_loss = s*style_loss(style_images, generated_images)
-            loss = c_loss + s_loss
+            clr_loss = color*color_loss(images, generated_images)
             
-            #loss = criteria(images, style_images, generated_images)
+            loss = c_loss + s_loss + clr_loss
+            
+            
 
             loss.backward()
             optimizer.step()
             if b % show_every == 0:
                 print('Epoch:{} Batch:{} Loss={:.5f}'.format(e, i+1, loss.item()))
                 print('Content_L:{} Style_L:{}'.format(c_loss.item(), s_loss.item()))
-                if show_images:
-                    show_generated_images(dataset=content_dataset, net=net, device=device)
+                print('Color_L:{}'.format(clr_loss.item()))
 
         torch.save({'state_dict':net.state_dict(),
                     'epoch':e,
                     'c':c,
-                    's':s}, (pkl_name+str(e)+'.pth'))
+                    's':s,
+                    'color': color,
+                   'content_loss': c_loss.item(),
+                   'style_loss': s_loss.item(),
+                   'color_loss': clr_loss.item()}, (pkl_name+str(e)+'.pth'))
     print('Training Finished!')
+
 
 
 
@@ -76,24 +83,22 @@ def show_generated_images(dataset, net, device,show_n=5):
 if __name__ == '__main__':
 
     EPOCHS = 2
-    BATCH_SIZE = 4
+    BATCH_SIZE = 2
     ROOT = os.getcwd()
-    IMAGE_FOLDERS = os.path.join(ROOT,'ImageData')
     SHOW_EVERY = 500
-    ANNOTATION_FOLDER = os.path.join(IMAGE_FOLDERS, 'annotations', 'captions_train2014.json')
-    TRAIN_IMAGES_FOLDER = os.path.join(IMAGE_FOLDERS, 'train2014')
-    STYLE_IMAGE_FOLDER = os.path.join(ROOT, 'ImageData', 'styleimages')
-    content_dataset = MSCOCODataset(ANNOTATION_FOLDER, TRAIN_IMAGES_FOLDER, image_transform())
+    TRAIN_IMAGES_FOLDER = os.path.join(ROOT, 'train2014')
+    STYLE_IMAGE_FOLDER = os.path.join(ROOT, 'StyleImages')
+    content_dataset = MSCOCODataset(TRAIN_IMAGES_FOLDER, image_transform())
     style_dataset = StyleImageDataset(STYLE_IMAGE_FOLDER, image_transform())
     style_transfer_net = StyleTransferNet()
     optimizer = Adam(style_transfer_net.parameters(), lr=1e-3)
-    C = 100000
-    S = 440000
+    C = 100000.0
+    S = 600000.0
+    COLOR = 600.0
     DEVICE = 'cuda'
-    PKL_NAME = 'style_transfer'
-
+    PKL_NAME = 'vangogh_color600'
         
 
-    train(style_transfer_net, EPOCHS, BATCH_SIZE, content_dataset, style_dataset, optimizer, C, S, DEVICE, PKL_NAME)
+    train(style_transfer_net, EPOCHS, BATCH_SIZE, content_dataset, style_dataset, optimizer, C, S, COLOR, DEVICE, PKL_NAME)
 
 
