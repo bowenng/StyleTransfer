@@ -1,6 +1,5 @@
 import torch.utils.data as data
 from PIL import Image
-from pycocotools.coco import COCO
 from torchvision import transforms
 import os
 import numpy as np
@@ -9,24 +8,22 @@ import numpy as np
 
 class MSCOCODataset(data.Dataset):
 
-    def __init__(self, annotation_file: str, image_folder: str, transform=None) -> None:
-        super().__init__()
-
-        self.annotation_file = annotation_file
-        self.image_folder = image_folder
+    def __init__(self, root, transform=None):
+        self.root = root
+        files = os.listdir(root)
+        self.image_files = [file for file in files if self.is_image(file)]# store image file names in a list
         self.transform = transform
-
-        self.coco = COCO(annotation_file)
-        self.image_ids = list(self.coco.imgs.keys())
-
-    def __getitem__(self, index):
-        image_id = self.image_ids[index]
-        image_file = self.coco.loadImgs([image_id])[0]['file_name']
-        image = Image.open(os.path.join(self.image_folder, image_file)).convert('RGB')
-
-        if self.transform:
-            image = self.transform(image)
-        return image
-
+    
+    @staticmethod
+    def is_image(file):
+        return file.lower().endswith(('.jpg', '.png', '.jpeg'))
+    
     def __len__(self):
-        return len(self.image_ids)
+        return len(self.image_files)
+    
+    def __getitem__(self, idx):
+        image_full_path = os.path.join(self.root, self.image_files[idx])
+        img = Image.open(image_full_path).convert('RGB')
+        if self.transform:
+            img = self.transform(img)
+        return img
