@@ -2,6 +2,7 @@ from torch import nn
 from torchvision.models import vgg16
 import torch
 import numpy as np
+from utils import rgb_to_ycbcr
 
 class StyleTransferNet(nn.Module):
 
@@ -189,6 +190,8 @@ class StyleLossNet(nn.Module):
         
     def forward(self, s, g):
         loss = 0
+        # expand style image
+        s = s.expand(g.size()[0], s.size()[1], s.size()[2], s.size()[3])
         for loss_net in self.style_loss_nets:
             s = loss_net(s)
             g = loss_net(g)
@@ -228,7 +231,21 @@ class FeatureStyleLoss(nn.Module):
         return self.c * self.content_loss_net(content, generated) \
                    + self.s * style_loss
         
-
+class ColorSimilarityLoss(nn.Module):
+    """
+    L2 loss between two images' color U,V channels in YUV space
+    """
+    def __init__(self,device='cuda'):
+        super().__init__()
+        self.loss = nn.MSELoss()
+        self.device=device
+    
+    def forward(self, content_image, generated_image):
+        content_image_yuv = rgb_to_ycbcr(content_image, device=self.device)
+        generated_image_yuv = rgb_to_ycbcr(generated_image, device=self.device)
+        
+        return self.loss(content_image_yuv[:,1:3,:,:], generated_image_yuv[:,1:3,:,:])
+        
 class ScaledTanh(nn.Module):
     def __init__(self, mean, std):
         super().__init__()
@@ -246,4 +263,4 @@ class ScaledTanh(nn.Module):
         x = self.k * x + self.b
         return x
     
-    
+        
