@@ -83,7 +83,7 @@ def show_generated_images(dataset, net, device,show_n=5):
 if __name__ == '__main__':
 
     EPOCHS = 2
-    BATCH_SIZE = 2
+    BATCH_SIZE = 4
     ROOT = os.getcwd()
     SHOW_EVERY = 500
     TRAIN_IMAGES_FOLDER = os.path.join(ROOT, 'train2014')
@@ -93,10 +93,10 @@ if __name__ == '__main__':
     style_transfer_net = StyleTransferNet()
     optimizer = Adam(style_transfer_net.parameters(), lr=1e-3)
     C = 100000.0
-    S = 600000.0
-    COLOR = 600.0
+    S = 700000.0
+    COLOR = 20000.0
     DEVICE = 'cuda'
-    PKL_NAME = 'vangogh_color600'
+    PKL_NAME = 'vangogh_YIQ'
         
 
     train(style_transfer_net, EPOCHS, BATCH_SIZE, content_dataset, style_dataset, optimizer, C, S, COLOR, DEVICE, PKL_NAME)
