@@ -28,3 +28,5 @@ Without Color Consistency Loss:
 
 With Color Consistency Loss:
 ![UR_Vangogh_Improved](https://github.com/bowenng/StyleTransfer/blob/master/sample_outputs/VangoghImproved.png)
+
+# Training Instruction to be updated...
